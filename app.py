@@ -1,285 +1,761 @@
-import json
+"""
+SmartStudy Planner AI - Main Application Entrypoint
+A clean, light, and interactive study scheduling suite powered by SQLite and local AI.
+"""
+
+import sys
 from datetime import date, datetime, timedelta
-from pathlib import Path
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 
-import requests
+# ---------------------------------------------------------
+# Auto-Launch Streamlit if executed directly via bare Python
+# Prevents "Thread 'MainThread': missing ScriptRunContext!" warning
+# ---------------------------------------------------------
+if __name__ == "__main__":
+    if get_script_run_ctx(suppress_warning=True) is None:
+        from streamlit.web import cli as stcli
+        sys.exit(stcli.main(["run", sys.argv[0]] + sys.argv[1:]))
+
+import altair as alt
+import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
-APP_DIR = Path(__file__).parent
-DATA_FILE = APP_DIR / "study_data.json"
-OLLAMA_URL = "http://localhost:11434/api/generate"
-DEFAULT_MODEL = "llama3.2"
+# Modular subsystem imports
+import database as db
+import planner
+import ai_assistant as ai
+import styles
 
-st.set_page_config(page_title="SmartStudy Planner AI", page_icon="📚", layout="wide")
 
-def load_data():
-    if DATA_FILE.exists():
-        try:
-            return json.loads(DATA_FILE.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"subjects": [], "tasks": []}
+def main():
+    # ---------------------------------------------------------
+    # Page Configuration & Styling
+    # ---------------------------------------------------------
+    st.set_page_config(
+        page_title="SmartStudy Planner AI",
+        page_icon="📚",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    st.markdown(styles.CUSTOM_CSS, unsafe_allow_html=True)
 
-def save_data(data):
-    DATA_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    # ---------------------------------------------------------
+    # Database Initialization (SQLite)
+    # ---------------------------------------------------------
+    db.init_db()
 
-def days_until(exam_date):
-    return max(0, (exam_date - date.today()).days)
+    # Query current state from SQLite
+    subjects_data = db.get_all_subjects()
+    tasks_data = db.get_all_tasks()
 
-def make_plan(subjects, hours_per_day, start_day, number_of_days):
-    """Create a simple weighted plan; nearer exams and harder subjects get more sessions."""
-    tasks = []
-    available_days = [start_day + timedelta(days=i) for i in range(number_of_days)]
-    if not subjects or not available_days:
-        return tasks
+    # ---------------------------------------------------------
+    # Top Navigation Banner
+    # ---------------------------------------------------------
+    st.markdown(styles.get_web_navbar_html(), unsafe_allow_html=True)
 
-    weights = []
-    for subject in subjects:
-        days_left = max(1, (subject["exam_date"] - start_day).days)
-        difficulty = int(subject["difficulty"])
-        weight = (difficulty + 1) / min(days_left, 30)
-        weights.append(weight)
+    # ---------------------------------------------------------
+    # Sidebar: Simple Settings & Health
+    # ---------------------------------------------------------
+    with st.sidebar:
+        st.markdown("### ⚙️ Study Settings")
+        hours_per_day = st.slider("Daily Study Hours", min_value=1, max_value=8, value=3, help="Target study time allocated per day.")
+        plan_days = st.slider("Planning Horizon (Days)", min_value=3, max_value=21, value=7, help="How many days into the future to schedule.")
 
-    total_weight = sum(weights) or 1
-    sessions_per_day = max(1, int(hours_per_day))
-    subject_index = 0
-
-    for study_day in available_days:
-        # Spread sessions over subjects using weighted selection, without scheduling after exam date.
-        day_sessions = []
-        eligible = [
-            (i, s, weights[i]) for i, s in enumerate(subjects)
-            if s["exam_date"] >= study_day
-        ]
-        if not eligible:
-            continue
-
-        for session_num in range(sessions_per_day):
-            if not eligible:
-                break
-            # Weighted round-robin approximation, rotated daily.
-            eligible.sort(key=lambda item: (
-                (item[1]["exam_date"] - study_day).days,
-                -int(item[1]["difficulty"])
-            ))
-            pick_index = (subject_index + session_num) % len(eligible)
-            _, subject, _ = eligible[pick_index]
-            tasks.append({
-                "id": f"{study_day.isoformat()}-{len(tasks)}",
-                "date": study_day.isoformat(),
-                "subject": subject["name"],
-                "title": f"{subject['name']} — focused study session",
-                "status": "Pending",
-                "duration": 60,
-            })
-        subject_index += 1
-    return tasks
-
-def ask_ollama(prompt, model):
-    try:
-        response = requests.post(
-            OLLAMA_URL,
-            json={"model": model, "prompt": prompt, "stream": False},
-            timeout=120,
+        st.markdown("---")
+        st.markdown("### 🤖 AI Coach Model")
+        model_name = st.text_input(
+            "Local Model",
+            value=ai.DEFAULT_MODEL,
+            help="Ollama model name (e.g. llama3.2, gemma3:4b, mistral).",
         )
-        response.raise_for_status()
-        return response.json().get("response", "The model returned an empty response.")
-    except requests.exceptions.ConnectionError:
-        return ("I couldn't connect to Ollama. Open the Ollama app and run "
-                f"`ollama run {model}` in Command Prompt, then try again.")
-    except requests.exceptions.Timeout:
-        return "The model took too long to respond. Try a smaller model or a shorter question."
-    except requests.exceptions.RequestException as exc:
-        return f"Ollama request failed: {exc}"
 
-if "data" not in st.session_state:
-    st.session_state.data = load_data()
-
-data = st.session_state.data
-st.title("📚 SmartStudy Planner AI")
-st.caption("Your local study planner — create a timetable, track progress, and ask Ollama for study advice.")
-
-with st.sidebar:
-    st.header("⚙️ Planner settings")
-    model_name = st.text_input("Ollama model name", value=DEFAULT_MODEL, help="Use a model installed in Ollama, e.g. llama3.2 or gemma3:4b.")
-    hours_per_day = st.slider("Study hours per day", min_value=1, max_value=10, value=3)
-    plan_days = st.slider("Plan length (days)", min_value=3, max_value=30, value=7)
-    st.markdown("**Local AI status**")
-    st.caption("Ollama normally listens at `http://localhost:11434`.")
-
-tab_setup, tab_plan, tab_ai = st.tabs(["1. My Subjects", "2. Study Plan", "3. AI Study Assistant"])
-
-with tab_setup:
-    st.subheader("Add your subjects and exam dates")
-    st.write("Enter at least one subject. Difficulty: 1 = easy, 5 = very difficult.")
-    with st.form("subject_form", clear_on_submit=False):
-        existing = data.get("subjects", [])
-        default_rows = [
-            {
-                "Subject": s["name"],
-                "Exam date": date.fromisoformat(s["exam_date"]),
-                "Difficulty (1-5)": int(s["difficulty"]),
-            } for s in existing
-        ]
-        if not default_rows:
-            default_rows = [
-                {"Subject": "Python", "Exam date": date.today() + timedelta(days=14), "Difficulty (1-5)": 4},
-                {"Subject": "DBMS", "Exam date": date.today() + timedelta(days=10), "Difficulty (1-5)": 3},
-            ]
-        edited = st.data_editor(
-            default_rows,
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "Subject": st.column_config.TextColumn("Subject", required=True),
-                "Exam date": st.column_config.DateColumn("Exam date", required=True),
-                "Difficulty (1-5)": st.column_config.NumberColumn(
-                    "Difficulty (1-5)", min_value=1, max_value=5, step=1, required=True
-                ),
-            },
-            key="subject_editor",
-        )
-        submitted = st.form_submit_button("💾 Save subjects")
-    if submitted:
-        cleaned = []
-        for row in edited:
-            name = str(row.get("Subject") or "").strip()
-            exam = row.get("Exam date")
-            difficulty = row.get("Difficulty (1-5)", 3)
-            if isinstance(exam, str):
-                try:
-                    exam = date.fromisoformat(exam)
-                except ValueError:
-                    exam = None
-            elif isinstance(exam, datetime):
-                exam = exam.date()
-
-            if name and isinstance(exam, date):
-                cleaned.append({
-                    "name": name,
-                    "exam_date": exam.isoformat(),
-                    "difficulty": int(difficulty or 3),
-                })
-        data["subjects"] = cleaned
-        save_data(data)
-        st.session_state.data = data
-        st.success(f"Saved {len(cleaned)} subject(s).")
-
-    if st.button("🗑️ Clear all saved data"):
-        st.session_state.data = {"subjects": [], "tasks": []}
-        save_data(st.session_state.data)
-        st.rerun()
-
-with tab_plan:
-    st.subheader("Your timetable")
-    if not data.get("subjects"):
-        st.info("First add and save your subjects in the My Subjects tab.")
-    else:
-        if st.button("✨ Generate / replace study plan", type="primary"):
-            subjects = [
-                {**s, "exam_date": date.fromisoformat(s["exam_date"])}
-                for s in data["subjects"]
-            ]
-            new_plan = make_plan(subjects, hours_per_day, date.today(), plan_days)
-            if not new_plan:
-                st.warning("No study sessions could be scheduled. Make sure your subject exam dates are today or in the future.")
+        ollama_online, model_available, installed_models = ai.check_ollama_status(model_name.strip() or ai.DEFAULT_MODEL)
+        if ollama_online:
+            if model_available:
+                st.success(f"🟢 Ollama online • `{model_name}` ready", icon="✅")
             else:
-                data["tasks"] = new_plan
-                save_data(data)
-                st.session_state.data = data
-                st.success("Your study plan has been generated.")
+                st.warning(f"🟡 Ollama online, but `{model_name}` not found. Installed: {', '.join(installed_models) or 'None'}")
+        else:
+            st.info("💡 Local AI offline. Built-in interactive quiz and study guides are active!", icon="ℹ️")
+
+        st.markdown("---")
+        st.markdown("### 🗄️ SQLite Database")
+        db_stats = db.get_database_stats()
+        st.caption(f"📁 **File:** `{db_stats['file']}` ({db_stats['size_kb']} KB)")
+        st.caption(f"📚 **Subjects:** {db_stats['subjects_count']} • 📅 **Tasks:** {db_stats['tasks_count']}")
+        st.caption(f"⏱️ **Pomodoro Sprints:** {db_stats['pomodoro_count']} completed")
+
+    # ---------------------------------------------------------
+    # Summary Metrics Cards
+    # ---------------------------------------------------------
+    total_tasks = len(tasks_data)
+    completed_tasks = sum(1 for t in tasks_data if t.get("status") == "Completed")
+    missed_tasks = sum(1 for t in tasks_data if t.get("status") == "Missed")
+
+    st.markdown(
+        styles.get_metric_cards_html(total_tasks, completed_tasks, missed_tasks, plan_days),
+        unsafe_allow_html=True,
+    )
+
+    # ---------------------------------------------------------
+    # Friendly Quick-Start if Database is Fresh / Empty
+    # ---------------------------------------------------------
+    if not subjects_data and not tasks_data:
+        st.markdown(
+            """
+            <div class="web-card" style="text-align: center; padding: 32px 20px; border: 2px dashed #CBD5E1;">
+                <div style="font-size: 40px; margin-bottom: 10px;">🚀</div>
+                <h3 style="font-size: 19px; font-weight: 800; color: #1E1B4B; margin: 0;">Welcome to SmartStudy Planner AI!</h3>
+                <p style="font-size: 14px; color: #64748B; max-width: 550px; margin: 6px auto 18px auto;">
+                    Organize your upcoming exams, auto-generate a balanced daily study schedule, practice with interactive quizzes, and stay focused with Pomodoro timers.
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        col_qs1, col_qs2, col_qs_spacer = st.columns([3, 3, 4])
+        with col_qs1:
+            if st.button("✨ Load Sample Schedule (1-Click)", type="primary", use_container_width=True):
+                db.seed_sample_plan_data()
+                st.balloons()
+                st.success("🎉 Sample curriculum and schedule loaded into SQLite!")
                 st.rerun()
+        with col_qs2:
+            if st.button("➕ Add My Own Subjects First", use_container_width=True):
+                st.session_state.active_tab = 1
+                st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        tasks = data.get("tasks", [])
-        if tasks:
-            total = len(tasks)
-            completed = sum(t["status"] == "Completed" for t in tasks)
-            missed = sum(t["status"] == "Missed" for t in tasks)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Total sessions", total)
-            c2.metric("Completed", completed)
-            c3.metric("Pending / missed", total - completed)
-            st.progress(completed / total if total else 0)
+    # ---------------------------------------------------------
+    # Main Navigation Tabs (Clean, Basic & Highly Interactive)
+    # ---------------------------------------------------------
+    tab_tasks, tab_subjects, tab_pomodoro, tab_ai, tab_analytics = st.tabs([
+        "  📅 Daily Schedule & Tasks  ",
+        "  📚 Subjects & Exam Countdowns  ",
+        "  ⏱️ Focus Pomodoro Timer  ",
+        "  🤖 AI Study Coach & Quiz  ",
+        "  📊 Progress & Database  ",
+    ])
 
-            today_str = date.today().isoformat()
-            today_tasks = [t for t in tasks if t["date"] == today_str]
-            st.markdown("#### Today's sessions")
-            if today_tasks:
-                for task in today_tasks:
-                    st.write(f"• **{task['subject']}** — {task['title']} ({task['duration']} min) · {task['status']}")
-            else:
-                st.caption("No sessions scheduled for today. See the full plan below.")
+    today_str = date.today().isoformat()
 
-            st.markdown("#### Update session status")
-            status_options = ["Pending", "Completed", "Missed"]
-            for task in tasks:
-                with st.container(border=True):
-                    col1, col2, col3 = st.columns([3, 1, 1])
-                    col1.write(f"**{task['date']} · {task['subject']}**")
-                    col1.caption(task["title"])
-                    current_status = task.get("status", "Pending")
-                    status_idx = status_options.index(current_status) if current_status in status_options else 0
-                    status = col2.selectbox(
-                        "Status", status_options,
-                        index=status_idx,
-                        key=f"status_{task['id']}",
-                        label_visibility="collapsed",
-                    )
-                    if col3.button("Save", key=f"save_{task['id']}"):
-                        task["status"] = status
-                        save_data(data)
-                        st.session_state.data = data
+    # ---------------------------------------------------------
+    # TAB 1: DAILY SCHEDULE & INTERACTIVE TASKS
+    # ---------------------------------------------------------
+    with tab_tasks:
+        if not subjects_data:
+            st.info("👉 You don't have any subjects yet. Click the button below to load a sample or add your courses.", icon="ℹ️")
+            if st.button("✨ Load Sample MCA Schedule (1-Click)", type="primary"):
+                db.seed_sample_plan_data()
+                st.balloons()
+                st.rerun()
+        else:
+            # Action Toolbar
+            col_a1, col_a2, col_a3, col_filter = st.columns([3, 3, 2, 3])
+            with col_a1:
+                if st.button("✨ Generate / Refresh Schedule", type="primary", use_container_width=True):
+                    new_plan = planner.make_plan(subjects_data, hours_per_day, date.today(), plan_days)
+                    if new_plan:
+                        db.set_all_tasks(new_plan)
+                        st.balloons()
+                        st.toast(f"Generated {len(new_plan)} study sessions!")
+                        st.rerun()
+                    else:
+                        st.warning("No sessions scheduled. Check if exam dates are in the future.")
+
+            with col_a2:
+                missed_count = sum(1 for t in tasks_data if t.get("status") == "Missed")
+                resched_label = f"🔄 Reschedule Missed ({missed_count})" if missed_count else "🔄 Reschedule Missed"
+                if st.button(resched_label, use_container_width=True, disabled=(missed_count == 0)):
+                    missed_items = [t for t in tasks_data if t.get("status") == "Missed"]
+                    rescheduled_map = planner.calculate_reschedule_mapping(missed_items, plan_days)
+                    db.reschedule_tasks(rescheduled_map)
+                    st.toast(f"Rescheduled {len(rescheduled_map)} missed session(s) into upcoming slots!")
+                    st.rerun()
+
+            with col_a3:
+                with st.popover("➕ Add Task"):
+                    st.markdown("##### Add Custom Study Session")
+                    custom_sub = st.selectbox("Subject", [s["name"] for s in subjects_data], key="custom_sub")
+                    custom_date = st.date_input("Date", value=date.today(), key="custom_date")
+                    custom_title = st.text_input("Session Title", value=f"{custom_sub} - Deep Revision", key="custom_title")
+                    custom_dur = st.number_input("Duration (minutes)", min_value=15, max_value=180, value=60, step=15)
+                    if st.button("Save Session", type="primary", use_container_width=True):
+                        import uuid
+                        new_t = {
+                            "id": f"custom_{uuid.uuid4().hex[:6]}",
+                            "date": custom_date.isoformat(),
+                            "subject": custom_sub,
+                            "title": custom_title.strip() or f"{custom_sub} Study Session",
+                            "status": "Pending",
+                            "duration": int(custom_dur),
+                        }
+                        all_t = db.get_all_tasks() + [new_t]
+                        db.set_all_tasks(all_t)
+                        st.success("Session added!")
                         st.rerun()
 
-            if st.button("🔄 Reschedule missed sessions"):
-                missed_tasks = [t for t in tasks if t.get("status") == "Missed"]
-                if not missed_tasks:
-                    st.info("No missed sessions found to reschedule.")
-                else:
-                    pending_days = [
-                        (date.today() + timedelta(days=i)).isoformat()
-                        for i in range(1, plan_days + 8)
+            with col_filter:
+                filter_mode = st.selectbox(
+                    "Filter",
+                    ["All Sessions", "Today's Sessions", "Pending Only", "Completed Only", "Missed Only"],
+                    label_visibility="collapsed",
+                )
+
+            # Search & Course Filter
+            c_srch, c_crs = st.columns([3, 2])
+            with c_srch:
+                search_q = st.text_input("Search", placeholder="🔍 Search by topic, subject, or date...", label_visibility="collapsed")
+            with c_crs:
+                crs_options = ["All Courses"] + [s["name"] for s in subjects_data]
+                selected_crs = st.selectbox("Course", crs_options, label_visibility="collapsed")
+
+            if not tasks_data:
+                st.markdown(
+                    """
+                    <div class="web-card" style="text-align: center; padding: 35px 20px;">
+                        <h4 style="color: #1E293B; margin: 0;">No Timetable Generated Yet</h4>
+                        <p style="color: #64748B; font-size: 13.5px; margin-top: 4px;">Click <b>Generate / Refresh Schedule</b> above to create your study plan.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            else:
+                # Filter Tasks
+                visible_tasks = tasks_data
+
+                if filter_mode == "Today's Sessions":
+                    visible_tasks = [t for t in visible_tasks if t.get("date") == today_str]
+                elif filter_mode == "Pending Only":
+                    visible_tasks = [t for t in visible_tasks if t.get("status") == "Pending"]
+                elif filter_mode == "Completed Only":
+                    visible_tasks = [t for t in visible_tasks if t.get("status") == "Completed"]
+                elif filter_mode == "Missed Only":
+                    visible_tasks = [t for t in visible_tasks if t.get("status") == "Missed"]
+
+                if selected_crs != "All Courses":
+                    visible_tasks = [t for t in visible_tasks if t.get("subject") == selected_crs]
+
+                if search_q.strip():
+                    q = search_q.strip().lower()
+                    visible_tasks = [
+                        t for t in visible_tasks
+                        if q in t.get("subject", "").lower() or q in t.get("title", "").lower() or q in t.get("date", "").lower()
                     ]
-                    rescheduled_count = 0
-                    for task in missed_tasks:
-                        new_date = next((d for d in pending_days if d >= date.today().isoformat()), None)
-                        if new_date:
-                            task["date"] = new_date
-                            task["status"] = "Pending"
-                            task["title"] = f"{task['subject']} — rescheduled study session"
-                            pending_days.remove(new_date)
-                            rescheduled_count += 1
-                    save_data(data)
-                    st.session_state.data = data
-                    st.success(f"Rescheduled {rescheduled_count} missed session(s).")
+
+                # Today's Progress Banner
+                today_all = [t for t in tasks_data if t.get("date") == today_str]
+                if today_all:
+                    today_done = sum(1 for t in today_all if t.get("status") == "Completed")
+                    today_pct = int(today_done / len(today_all) * 100)
+                    all_today_done = (today_done == len(today_all))
+
+                    st.markdown(
+                        f"""
+                        <div style="background: linear-gradient(135deg, {'#DCFCE7 0%, #BBF7D0 100%' if all_today_done else '#EEF2FF 0%, #E0E7FF 100%'}); border: 1px solid {'#86EFAC' if all_today_done else '#C7D2FE'}; border-radius: 12px; padding: 14px 18px; margin: 12px 0 16px 0; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <span style="font-weight: 800; color: {'#166534' if all_today_done else '#3730A3'}; font-size: 15px;">
+                                    {'🎉 All Set for Today!' if all_today_done else f"🎯 Today's Target ({today_str})"}
+                                </span>
+                                <div style="font-size: 13px; color: {'#15803D' if all_today_done else '#4338CA'}; margin-top: 2px;">
+                                    {today_done} of {len(today_all)} sessions completed ({today_pct}%)
+                                </div>
+                            </div>
+                            <span class="status-pill {'pill-green' if all_today_done else 'pill-blue'}">
+                                {'✓ Goal Reached' if all_today_done else f"{len(today_all) - today_done} Left Today"}
+                            </span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                if not visible_tasks:
+                    st.caption("No study sessions match your current filter.")
+                else:
+                    curr_date = None
+                    for task in visible_tasks:
+                        task_date = task.get("date", "")
+                        if task_date != curr_date:
+                            curr_date = task_date
+                            is_today = (task_date == today_str)
+                            tag = " — (Today)" if is_today else ""
+                            st.markdown(f"##### 📆 {task_date}{tag}")
+
+                        status = task.get("status", "Pending")
+                        box_class = "task-box-completed" if status == "Completed" else "task-box-missed" if status == "Missed" else ""
+
+                        col_t_info, col_t_act = st.columns([7, 4])
+                        with col_t_info:
+                            status_chip = (
+                                "chip-status-completed" if status == "Completed"
+                                else "chip-status-missed" if status == "Missed"
+                                else "chip-status-pending"
+                            )
+                            st.markdown(
+                                f"""
+                                <div class="task-box {box_class}">
+                                    <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 4px;">
+                                        <span class="chip chip-subject">{task.get('subject')}</span>
+                                        <span class="chip {status_chip}">{status}</span>
+                                        <span class="chip chip-date">⏱️ {task.get('duration', 60)} min</span>
+                                    </div>
+                                    <div style="font-size: 14.5px; font-weight: 600; color: #1E293B;">{task.get('title')}</div>
+                                </div>
+                                """,
+                                unsafe_allow_html=True,
+                            )
+
+                        with col_t_act:
+                            b1, b2, b3 = st.columns(3)
+                            with b1:
+                                if st.button("✅ Done", key=f"d_{task['id']}", use_container_width=True, disabled=(status == "Completed")):
+                                    db.update_task_status(task["id"], "Completed")
+                                    st.toast("🎉 Great job! Session marked complete.")
+                                    # Check if all today's tasks are done
+                                    remaining = sum(1 for t in db.get_all_tasks() if t.get("date") == today_str and t.get("status") != "Completed")
+                                    if remaining == 0 and len(today_all) > 0:
+                                        st.balloons()
+                                    st.rerun()
+
+                            with b2:
+                                if st.button("❌ Missed", key=f"m_{task['id']}", use_container_width=True, disabled=(status == "Missed")):
+                                    db.update_task_status(task["id"], "Missed")
+                                    st.toast("Marked as missed. You can reschedule anytime.")
+                                    st.rerun()
+
+                            with b3:
+                                if st.button("↺ Reset", key=f"r_{task['id']}", use_container_width=True, disabled=(status == "Pending")):
+                                    db.update_task_status(task["id"], "Pending")
+                                    st.rerun()
+
+    # ---------------------------------------------------------
+    # TAB 2: SUBJECTS & EXAM COUNTDOWN
+    # ---------------------------------------------------------
+    with tab_subjects:
+        st.markdown(
+            """
+            <div class="web-card">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">📚 My Courses & Exam Deadlines</h3>
+                        <p class="card-desc">Track days remaining until each exam and manage your curriculum stored in SQLite.</p>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Active Exam Countdown Cards
+        if subjects_data:
+            st.markdown("#### ⏳ Exam Countdowns")
+            cols_cd = st.columns(min(len(subjects_data), 4))
+            for idx, sub in enumerate(subjects_data):
+                col_c = cols_cd[idx % len(cols_cd)]
+                with col_c:
+                    d_left = planner.days_until(sub["exam_date"])
+                    urgent_class = "countdown-urgent" if d_left <= 3 else "countdown-warning" if d_left <= 7 else "countdown-normal"
+                    urgency_label = "🚨 High Urgency" if d_left <= 3 else "⚠️ Upcoming" if d_left <= 7 else "📅 In Prep"
+
+                    sub_tasks = [t for t in tasks_data if t.get("subject") == sub["name"]]
+                    sub_completed = sum(1 for t in sub_tasks if t.get("status") == "Completed")
+
+                    st.markdown(
+                        f"""
+                        <div class="countdown-card {urgent_class}">
+                            <div style="font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase;">{urgency_label}</div>
+                            <div style="font-size: 16px; font-weight: 800; color: #0F172A; margin: 3px 0;">{sub['name']}</div>
+                            <div style="font-size: 24px; font-weight: 900; color: {'#DC2626' if d_left <= 3 else '#D97706' if d_left <= 7 else '#2563EB'};">
+                                {d_left} <span style="font-size: 13px; font-weight: 600;">days left</span>
+                            </div>
+                            <div style="font-size: 12px; color: #64748B; margin-top: 4px;">
+                                Exam: <b>{sub['exam_date']}</b> • Diff: <b>{sub['difficulty']}/5</b>
+                            </div>
+                            <div style="font-size: 12px; color: #475569; margin-top: 3px;">
+                                ⏱️ {len(sub_tasks)} sessions planned ({sub_completed} done)
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+            st.markdown("<br>", unsafe_allow_html=True)
+
+        # Interactive Quick-Add Subject Form
+        st.markdown("#### ➕ Add New Course")
+        with st.container():
+            c_name, c_date, c_diff, c_btn = st.columns([4, 3, 3, 2])
+            with c_name:
+                new_sub_name = st.text_input("Course Name", placeholder="e.g. Operating Systems", label_visibility="collapsed")
+            with c_date:
+                new_sub_date = st.date_input("Target Exam Date", value=date.today() + timedelta(days=12), label_visibility="collapsed")
+            with c_diff:
+                new_sub_diff = st.selectbox("Difficulty", [1, 2, 3, 4, 5], index=2, format_func=lambda x: f"Difficulty: {x}/5", label_visibility="collapsed")
+            with c_btn:
+                if st.button("➕ Add Course", type="primary", use_container_width=True):
+                    if new_sub_name.strip():
+                        db.add_single_subject(new_sub_name.strip(), new_sub_date.isoformat(), new_sub_diff)
+                        st.toast(f"Added {new_sub_name}!")
+                        st.rerun()
+                    else:
+                        st.warning("Please enter a course name.")
+
+        # Quick Preset Suggestions
+        st.markdown("<p style='font-size: 12px; color: #64748B; margin: 4px 0 14px 0;'>💡 Quick presets: Click to add standard subjects in 1 click:</p>", unsafe_allow_html=True)
+        col_p1, col_p2, col_p3, col_p4 = st.columns(4)
+        with col_p1:
+            if st.button("+ Python Programming", use_container_width=True):
+                db.add_single_subject("Python Programming", (date.today() + timedelta(days=14)).isoformat(), 4)
+                st.rerun()
+        with col_p2:
+            if st.button("+ DBMS", use_container_width=True):
+                db.add_single_subject("Database Management Systems (DBMS)", (date.today() + timedelta(days=10)).isoformat(), 3)
+                st.rerun()
+        with col_p3:
+            if st.button("+ Computer Networks", use_container_width=True):
+                db.add_single_subject("Advanced Computer Networks", (date.today() + timedelta(days=6)).isoformat(), 3)
+                st.rerun()
+        with col_p4:
+            if st.button("+ Cloud Architecture", use_container_width=True):
+                db.add_single_subject("Cloud Computing Architecture", (date.today() + timedelta(days=18)).isoformat(), 4)
+                st.rerun()
+
+        st.markdown("---")
+
+        # Curriculum Table with 1-Click Delete Action
+        st.markdown("#### 📋 Enrolled Subjects List")
+        if not subjects_data:
+            st.caption("No subjects configured yet.")
+        else:
+            for s in subjects_data:
+                c_s1, c_s2, c_s3, c_s4 = st.columns([5, 3, 2, 2])
+                with c_s1:
+                    st.markdown(f"**{s['name']}**")
+                with c_s2:
+                    st.caption(f"📅 Exam: {s['exam_date']} ({planner.days_until(s['exam_date'])} days left)")
+                with c_s3:
+                    st.caption(f"⭐ Difficulty: {s['difficulty']}/5")
+                with c_s4:
+                    if st.button("🗑️ Remove", key=f"del_{s['id']}", use_container_width=True):
+                        db.delete_single_subject(s["id"])
+                        st.toast(f"Removed {s['name']}")
+                        st.rerun()
+                st.markdown("<hr style='margin: 4px 0; border: none; border-top: 1px solid #F1F5F9;'>", unsafe_allow_html=True)
+
+        col_seed, col_space, col_reset = st.columns([3, 5, 3])
+        with col_seed:
+            if st.button("✨ Load Default MCA Curriculum", use_container_width=True):
+                db.seed_default_curriculum()
+                st.toast("Loaded default curriculum!")
+                st.rerun()
+        with col_reset:
+            with st.popover("⚠️ Reset Database"):
+                st.write("This will erase all subjects, tasks, and pomodoro logs.")
+                if st.button("Confirm Reset Everything", type="primary", use_container_width=True):
+                    db.clear_database()
+                    st.success("Database cleared!")
                     st.rerun()
-        else:
-            st.info("Click **Generate / replace study plan** to create your timetable.")
 
-with tab_ai:
-    st.subheader("Ask your local AI study assistant")
-    st.write("Examples: “How should I revise DBMS in 5 days?” or “Give me a simple study strategy for Python.”")
-    question = st.text_area("Your question", placeholder="Type your study question here...")
-    if st.button("🤖 Ask Ollama", type="primary"):
-        if not question.strip():
-            st.warning("Please type a question first.")
-        else:
-            subject_summary = "\n".join(
-                f"- {s['name']}: exam on {s['exam_date']}, difficulty {s['difficulty']}/5"
-                for s in data.get("subjects", [])
-            ) or "No subjects have been saved yet."
-            prompt = (
-                "You are SmartStudy Planner AI, a supportive and practical study coach. "
-                "Give clear, realistic, concise advice. Do not claim to change the timetable yourself.\n\n"
-                f"Student's subjects:\n{subject_summary}\n"
-                f"Available study hours per day: {hours_per_day}\n"
-                f"Student question: {question}\n\n"
-                "Answer with actionable steps and a short schedule when useful."
+    # ---------------------------------------------------------
+    # TAB 3: FOCUS POMODORO TIMER
+    # ---------------------------------------------------------
+    with tab_pomodoro:
+        st.markdown(
+            """
+            <div class="web-card">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">⏱️ Interactive Focus Pomodoro Timer</h3>
+                        <p class="card-desc">Execute distraction-free 25-minute study sprints with built-in Web Audio alerts and automatic SQLite logging.</p>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        col_pomo_widget, col_pomo_log = st.columns([5, 4])
+
+        with col_pomo_widget:
+            components.html(styles.POMODORO_HTML, height=330)
+
+        with col_pomo_log:
+            st.markdown("#### 🎯 Quick Session Logger")
+            st.write("Log completed focus minutes directly to SQLite:")
+
+            today_pending = [t for t in tasks_data if t.get("date") == today_str and t.get("status") == "Pending"]
+
+            if today_pending:
+                chosen_task_title = st.selectbox(
+                    "Link to active today's task:",
+                    [t["title"] for t in today_pending],
+                    key="pomo_task_select",
+                )
+                if st.button("🏁 Log 25m Sprint & Mark Done", type="primary", use_container_width=True):
+                    for t in tasks_data:
+                        if t.get("title") == chosen_task_title and t.get("date") == today_str:
+                            db.update_task_status(t["id"], "Completed")
+                            db.log_pomodoro(t["subject"], 25)
+                            break
+                    st.balloons()
+                    st.toast(f"Logged 25m sprint for '{chosen_task_title}'!")
+                    st.rerun()
+            else:
+                st.success("🌟 All scheduled tasks for today are completed!")
+                free_sub = subjects_data[0]["name"] if subjects_data else "General Study"
+                if st.button("⏱️ Log 25m Free Focus Sprint", use_container_width=True):
+                    db.log_pomodoro(free_sub, 25)
+                    st.toast(f"Logged 25m focus sprint for {free_sub}!")
+                    st.rerun()
+
+            st.markdown("---")
+            st.markdown("##### 📜 Recent Focus Sprints")
+            recent_sprints = db.get_pomodoro_logs()[:5]
+            if recent_sprints:
+                for s in recent_sprints:
+                    st.markdown(f"• **{s['subject']}** — ⏱️ {s['duration_mins']} mins ({s['session_date']})")
+            else:
+                st.caption("No sprints logged yet. Complete a timer session to record your focus.")
+
+    # ---------------------------------------------------------
+    # TAB 4: AI STUDY COACH & INTERACTIVE QUIZ
+    # ---------------------------------------------------------
+    with tab_ai:
+        st.markdown(
+            """
+            <div class="web-card">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">🤖 Local AI Study Coach & Interactive Practice Quiz</h3>
+                        <p class="card-desc">Take interactive practice quizzes with instant grading, or request custom study strategies from your AI coach.</p>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        all_subject_names = [s["name"] for s in subjects_data] if subjects_data else ["Python Programming", "Database Management Systems (DBMS)", "Advanced Computer Networks", "Cloud Computing Architecture"]
+
+        col_q_sub, col_q_mode = st.columns([3, 2])
+        with col_q_sub:
+            chosen_ai_subject = st.selectbox("Select Target Course", all_subject_names, key="ai_sub_choice")
+
+        sub_tab_quiz, sub_tab_coach = st.tabs(["  📝 Interactive Practice Quiz  ", "  💡 AI Study Guidance  "])
+
+        # -----------------------------
+        # Sub-Tab A: Interactive Quiz
+        # -----------------------------
+        with sub_tab_quiz:
+            quiz_questions = ai.get_interactive_quiz(chosen_ai_subject)
+            st.markdown(f"#### 🎯 Practice Quiz: **{chosen_ai_subject}** (5 Questions)")
+            st.caption("Select your answers and click **Submit Quiz** below to receive instant scoring and detailed explanations:")
+
+            with st.form(f"quiz_form_{chosen_ai_subject}"):
+                user_answers = {}
+                for idx, q in enumerate(quiz_questions):
+                    st.markdown(f"**Q{idx + 1}. {q['question']}**")
+                    user_answers[idx] = st.radio(
+                        f"Select your answer for Q{idx + 1}:",
+                        q["options"],
+                        key=f"q_{chosen_ai_subject}_{idx}",
+                        label_visibility="collapsed",
+                    )
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                quiz_submitted = st.form_submit_button("🏁 Submit Quiz & Check Score", type="primary", use_container_width=True)
+
+            if quiz_submitted:
+                correct_count = 0
+                st.markdown("---")
+                st.markdown("### 📊 Quiz Results & Explanations")
+
+                for idx, q in enumerate(quiz_questions):
+                    selected = user_answers[idx]
+                    is_correct = (selected == q["answer"])
+                    if is_correct:
+                        correct_count += 1
+                        st.success(f"**Q{idx + 1}: Correct!** ✅ (Your answer: *{selected}*)")
+                    else:
+                        st.error(f"**Q{idx + 1}: Incorrect** ❌ (Your answer: *{selected}* • Correct: **{q['answer']}**)")
+                    st.info(f"💡 **Explanation:** {q['explanation']}")
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                score_pct = int(correct_count / len(quiz_questions) * 100)
+                if score_pct >= 80:
+                    st.balloons()
+                    st.success(f"🎉 Outstanding! Score: **{correct_count} / {len(quiz_questions)} ({score_pct}%)** — You are well prepared!")
+                elif score_pct >= 50:
+                    st.warning(f"👍 Good effort! Score: **{correct_count} / {len(quiz_questions)} ({score_pct}%)** — Review the explanations above to reinforce your weak areas.")
+                else:
+                    st.error(f"📚 Score: **{correct_count} / {len(quiz_questions)} ({score_pct}%)** — Dedicate another 25-minute Pomodoro sprint to this subject today.")
+
+        # -----------------------------
+        # Sub-Tab B: AI Study Guidance
+        # -----------------------------
+        with sub_tab_coach:
+            st.markdown("#### ⚡ Quick AI Modes")
+            c_gm1, c_gm2, c_gm3 = st.columns(3)
+            quick_prompt = None
+
+            with c_gm1:
+                if st.button("⚡ 3-Day Intensive Cram Plan", use_container_width=True):
+                    quick_prompt = f"Give me a high-intensity 3-day revision strategy for {chosen_ai_subject}."
+
+            with c_gm2:
+                if st.button("🧠 Active Recall & Feynman Guide", use_container_width=True):
+                    quick_prompt = f"How can I use active recall and the Feynman Technique to master {chosen_ai_subject}?"
+
+            with c_gm3:
+                if st.button("🎯 High-Yield Topics Breakdown", use_container_width=True):
+                    quick_prompt = f"What are the top 5 high-yield topics and exam questions for {chosen_ai_subject}?"
+
+            custom_user_q = st.text_area(
+                "Or ask a specific question:",
+                value=quick_prompt if quick_prompt else "",
+                placeholder=f"e.g. How to prepare for {chosen_ai_subject} in 2 days? What are the key formulas?",
+                height=90,
             )
-            with st.spinner("Ollama is thinking..."):
-                answer = ask_ollama(prompt, model_name.strip() or DEFAULT_MODEL)
-            st.markdown("#### AI response")
-            st.write(answer)
 
-st.divider()
-st.caption("Data is saved locally in study_data.json in this project folder. This is a beginner-friendly demo, not a replacement for your own exam timetable.")
+            if st.button("🚀 Ask Study Coach", type="primary", use_container_width=True):
+                if not custom_user_q.strip():
+                    st.warning("Please type a question or click one of the quick mode buttons above.")
+                else:
+                    prompt = ai.build_study_prompt(
+                        subjects_data,
+                        hours_per_day,
+                        plan_days,
+                        chosen_ai_subject,
+                        custom_user_q,
+                    )
+                    with st.spinner("🧠 Generating your customized study strategy..."):
+                        if ollama_online and model_available:
+                            response_text = ai.ask_ollama(prompt, model_name.strip() or ai.DEFAULT_MODEL)
+                        else:
+                            response_text = None
+
+                        if not response_text:
+                            response_text = ai.get_smart_fallback_response(custom_user_q, chosen_ai_subject, hours_per_day, plan_days)
+
+                    st.markdown(
+                        f"""
+                        <div class="web-card" style="border: 1px solid #C7D2FE; margin-top: 14px;">
+                            <div style="font-weight: 700; color: #4338CA; margin-bottom: 6px; display: flex; justify-content: space-between;">
+                                <span>🧠 Study Coach Insights</span>
+                                <span style="font-size: 11px; font-weight: 500; color: #64748B;">{f'Ollama: {model_name}' if (ollama_online and model_available) else 'Built-in Study Engine'}</span>
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(response_text)
+
+    # ---------------------------------------------------------
+    # TAB 5: PROGRESS & DATABASE
+    # ---------------------------------------------------------
+    with tab_analytics:
+        st.markdown(
+            """
+            <div class="web-card">
+                <div class="card-header">
+                    <div>
+                        <h3 class="card-title">📊 Revision Analytics & SQLite Database Inspector</h3>
+                        <p class="card-desc">Visual workload allocation, task completion breakdown, and direct table records inspection.</p>
+                    </div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        if not tasks_data:
+            st.info("No study sessions scheduled yet. Generate a timetable to view visual analytics.")
+        else:
+            df_tasks = pd.DataFrame(tasks_data)
+
+            col_c1, col_c2 = st.columns(2)
+
+            with col_c1:
+                st.markdown("##### 📚 Hours Allocated per Subject")
+                sub_counts = df_tasks["subject"].value_counts().reset_index()
+                sub_counts.columns = ["Subject", "Hours"]
+
+                bar_chart = (
+                    alt.Chart(sub_counts)
+                    .mark_bar(cornerRadiusTopRight=6, cornerRadiusBottomRight=6)
+                    .encode(
+                        x=alt.X("Hours:Q", title="Total Hours"),
+                        y=alt.Y("Subject:N", sort="-x", title=None),
+                        color=alt.Color("Subject:N", legend=None, scale=alt.Scale(scheme="indigo")),
+                        tooltip=["Subject", "Hours"],
+                    )
+                    .properties(height=240)
+                )
+                st.altair_chart(bar_chart, use_container_width=True)
+
+            with col_c2:
+                st.markdown("##### 🎯 Task Status Breakdown")
+                status_counts = df_tasks["status"].value_counts().reset_index()
+                status_counts.columns = ["Status", "Count"]
+
+                donut_chart = (
+                    alt.Chart(status_counts)
+                    .mark_arc(innerRadius=50, cornerRadius=4)
+                    .encode(
+                        theta=alt.Theta("Count:Q"),
+                        color=alt.Color(
+                            "Status:N",
+                            scale=alt.Scale(
+                                domain=["Completed", "Pending", "Missed"],
+                                range=["#22C55E", "#F59E0B", "#EF4444"],
+                            ),
+                        ),
+                        tooltip=["Status", "Count"],
+                    )
+                    .properties(height=240)
+                )
+                st.altair_chart(donut_chart, use_container_width=True)
+
+        # Direct SQLite Tables Viewer
+        st.markdown("---")
+        st.markdown("#### 🗄️ SQLite Database Inspector (`study_database.db`)")
+        st.caption("Inspect live records stored in relational tables:")
+
+        t1, t2, t3 = st.tabs(["📋 subjects table", "📅 tasks table", "⏱️ pomodoro_logs table"])
+        with t1:
+            raw_s = db.get_all_subjects()
+            if raw_s:
+                st.dataframe(pd.DataFrame(raw_s), use_container_width=True)
+            else:
+                st.caption("No records in subjects table.")
+
+        with t2:
+            raw_t = db.get_all_tasks()
+            if raw_t:
+                st.dataframe(pd.DataFrame(raw_t), use_container_width=True)
+            else:
+                st.caption("No records in tasks table.")
+
+        with t3:
+            raw_p = db.get_pomodoro_logs()
+            if raw_p:
+                st.dataframe(pd.DataFrame(raw_p), use_container_width=True)
+            else:
+                st.caption("No records in pomodoro_logs table.")
+
+    # ---------------------------------------------------------
+    # Web Footer
+    # ---------------------------------------------------------
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div style="border-top: 1px solid #E2E8F0; padding: 18px 0; text-align: center; color: #94A3B8; font-size: 12px;">
+            SmartStudy Planner AI • Clean, Interactive Local Study Suite • SQLite Relational Engine (<code>study_database.db</code>)
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+if __name__ == "__main__":
+    main()
