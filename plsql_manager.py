@@ -338,3 +338,4 @@ def plsql_get_audit_logs(limit=20):
                 }
                 for r in rows
             ]
+

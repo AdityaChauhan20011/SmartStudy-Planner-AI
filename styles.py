@@ -1,14 +1,20 @@
 """
-SmartStudy Planner AI - Modern Light UI Styles & Interactive Components
-Contains custom CSS styles, web banner templates, and embedded HTML5/JS Pomodoro timer.
+SmartStudy Planner AI (StudyFlow) - UI Styles & Layout Components
+Replicates modern StudyFlow SaaS aesthetics:
+- Dark sleek sidebar (#0F172A) with vibrant purple pill navigation (#7C3AED)
+- Clean, bright card containers (#FFFFFF on #F8FAFC)
+- Interactive Priority Tasks list with priority pills
+- Colored course cards with progress tracks
+- Live Study Session widget with digital timer
+- Tasks Progress card with segmented study streak indicators
 """
 
 CUSTOM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 html, body, [class*="css"] {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     color: #0F172A;
 }
 
@@ -18,479 +24,506 @@ html, body, [class*="css"] {
 
 #MainMenu {visibility: hidden;}
 header[data-testid="stHeader"] {
-    background: rgba(248, 250, 252, 0.85) !important;
-    backdrop-filter: blur(10px);
+    background: transparent !important;
 }
 footer {visibility: hidden;}
 
-/* Custom Top Navigation Banner */
-.web-navbar {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 16px;
-    padding: 18px 24px;
-    margin-bottom: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+/* -------------------------------------------------------------
+   DARK SLEEK SIDEBAR (#0F172A)
+------------------------------------------------------------- */
+section[data-testid="stSidebar"] {
+    background-color: #0F172A !important;
+    border-right: 1px solid #1E293B !important;
 }
-.brand-group {
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] span,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h1,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h2,
+section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] h3 {
+    color: #F8FAFC !important;
+}
+
+/* Sidebar Brand Header */
+.sidebar-brand-box {
+    padding: 12px 6px 20px 6px;
     display: flex;
     align-items: center;
-    gap: 14px;
+    gap: 12px;
 }
-.brand-icon-wrapper {
-    background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
-    width: 48px;
-    height: 48px;
-    border-radius: 12px;
+.sidebar-brand-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #7C3AED 0%, #4F46E5 100%);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 24px;
-    border: 1px solid #C7D2FE;
-    box-shadow: 0 2px 4px rgba(79, 70, 229, 0.1);
+    font-size: 20px;
+    color: #FFFFFF;
+    box-shadow: 0 4px 10px rgba(124, 58, 237, 0.4);
 }
-.brand-title {
-    margin: 0;
-    font-size: 22px;
+.sidebar-brand-title {
+    font-size: 18px;
     font-weight: 800;
-    color: #1E1B4B;
+    color: #FFFFFF !important;
     letter-spacing: -0.02em;
+    margin: 0;
+    line-height: 1.2;
 }
-.brand-subtitle {
-    margin: 2px 0 0 0;
-    font-size: 13px;
-    color: #64748B;
+.sidebar-brand-subtitle {
+    font-size: 11.5px;
+    color: #94A3B8 !important;
+    margin: 0;
     font-weight: 500;
 }
-.badge-stack {
+
+/* Sidebar Radio Navigation Items */
+section[data-testid="stSidebar"] div[role="radiogroup"] {
+    gap: 4px !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] > label {
+    padding: 10px 14px !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    font-size: 13.5px !important;
+    color: #94A3B8 !important;
+    transition: all 0.15s ease !important;
+    border: none !important;
+    background: transparent !important;
+    margin: 0 !important;
+    cursor: pointer !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:hover {
+    background-color: #1E293B !important;
+    color: #FFFFFF !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] > label:has(input:checked) {
+    background: #7C3AED !important; /* Active vibrant purple */
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35) !important;
+}
+section[data-testid="stSidebar"] div[role="radiogroup"] input {
+    display: none !important;
+}
+
+/* Sidebar AI Assistant Box at bottom */
+.sidebar-ai-box {
+    background: #1E293B;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 30px;
+}
+.sidebar-ai-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex-wrap: wrap;
-}
-.status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
-    border-radius: 9999px;
-    font-size: 12px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-}
-.pill-green {
-    background-color: #DCFCE7;
-    color: #15803D;
-    border: 1px solid #BBF7D0;
-}
-.pill-blue {
-    background-color: #EEF2FF;
-    color: #4338CA;
-    border: 1px solid #C7D2FE;
-}
-.pill-purple {
-    background-color: #FAF5FF;
-    color: #7E22CE;
-    border: 1px solid #E9D5FF;
-}
-
-/* Metric Cards */
-.metrics-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-    margin-bottom: 22px;
-}
-.metric-card {
-    background: #FFFFFF;
-    border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 16px 18px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-.metric-card:hover {
-    box-shadow: 0 6px 12px -2px rgba(0, 0, 0, 0.06);
-    transform: translateY(-2px);
-}
-.metric-label {
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #64748B;
-    margin-bottom: 4px;
+    color: #C4B5FD;
+    margin-bottom: 5px;
 }
-.metric-value {
-    font-size: 26px;
-    font-weight: 800;
-    color: #0F172A;
-    line-height: 1.1;
-}
-.metric-sub {
-    font-size: 12px;
+.sidebar-ai-text {
+    font-size: 11.5px;
     color: #94A3B8;
-    margin-top: 5px;
-    font-weight: 500;
-}
-.progress-track {
-    width: 100%;
-    height: 8px;
-    background-color: #F1F5F9;
-    border-radius: 9999px;
-    overflow: hidden;
-    margin-top: 8px;
-}
-.progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4F46E5 0%, #10B981 100%);
-    border-radius: 9999px;
-    transition: width 0.5s ease;
+    line-height: 1.4;
+    margin: 0;
 }
 
-/* Tabs Redesign */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    background-color: #F1F5F9;
-    padding: 6px;
-    border-radius: 12px;
-    border: 1px solid #E2E8F0;
-    margin-bottom: 18px;
-}
-.stTabs [data-baseweb="tab"] {
-    height: 40px;
-    border-radius: 9px;
-    font-weight: 600;
-    font-size: 13.5px;
-    color: #64748B;
-    background-color: transparent;
-    padding: 0 18px;
-    border: none !important;
-    transition: all 0.2s ease;
-}
-.stTabs [aria-selected="true"] {
-    background-color: #FFFFFF !important;
-    color: #4F46E5 !important;
-    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.05) !important;
-}
-
-/* Card Containers */
-.web-card {
+/* -------------------------------------------------------------
+   WHITE SAAS CARDS & CONTAINERS
+------------------------------------------------------------- */
+.sf-card {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
-    border-radius: 14px;
-    padding: 20px;
+    border-radius: 16px;
+    padding: 22px;
     margin-bottom: 18px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02);
+    transition: all 0.2s ease;
 }
-.card-header {
+.sf-card:hover {
+    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+}
+
+.sf-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 14px;
 }
-.card-title {
-    font-size: 17px;
+.sf-card-title {
+    font-size: 16px;
     font-weight: 700;
     color: #0F172A;
     margin: 0;
-}
-.card-desc {
-    font-size: 13px;
-    color: #64748B;
-    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-/* Countdown Cards */
-.countdown-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    margin-bottom: 18px;
-}
-.countdown-card {
+/* -------------------------------------------------------------
+   AI STUDY RECOMMENDATIONS BANNER
+------------------------------------------------------------- */
+.ai-rec-banner {
     background: #FFFFFF;
-    border-radius: 12px;
-    padding: 14px 16px;
     border: 1px solid #E2E8F0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
-    transition: all 0.2s ease;
+    border-radius: 16px;
+    padding: 26px 20px;
+    text-align: center;
+    margin-bottom: 22px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
 }
-.countdown-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 5px 10px -2px rgba(0, 0, 0, 0.06);
+.ai-rec-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #0F172A;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 6px;
 }
-.countdown-urgent {
-    border-left: 5px solid #EF4444;
-    background: linear-gradient(135deg, #FEF2F2 0%, #FFFFFF 100%);
-}
-.countdown-warning {
-    border-left: 5px solid #F59E0B;
-    background: linear-gradient(135deg, #FFFBEB 0%, #FFFFFF 100%);
-}
-.countdown-normal {
-    border-left: 5px solid #3B82F6;
-    background: linear-gradient(135deg, #EFF6FF 0%, #FFFFFF 100%);
-}
-
-/* Badges & Chips */
-.chip {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 11.5px;
-    font-weight: 600;
-    margin-right: 6px;
-}
-.chip-date {
-    background-color: #F1F5F9;
-    color: #475569;
-}
-.chip-subject {
-    background-color: #EEF2FF;
-    color: #4F46E5;
-    border: 1px solid #C7D2FE;
-}
-.chip-status-completed {
-    background-color: #DCFCE7;
-    color: #166534;
-}
-.chip-status-pending {
-    background-color: #FEF3C7;
-    color: #92400E;
-}
-.chip-status-missed {
-    background-color: #FEE2E2;
-    color: #991B1B;
+.ai-rec-desc {
+    font-size: 13.5px;
+    color: #64748B;
+    margin: 0 auto 18px auto;
+    max-width: 500px;
 }
 
-/* Interactive Quick Buttons */
-.stButton>button {
-    border-radius: 9px !important;
-    font-weight: 600 !important;
-    font-size: 13.5px !important;
-    padding: 6px 14px !important;
-    transition: all 0.2s ease !important;
-}
-.stButton>button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.07);
-}
-button[kind="primary"] {
-    background: linear-gradient(135deg, #4F46E5 0%, #4338CA 100%) !important;
-    border: none !important;
-    color: #FFFFFF !important;
-}
-
-/* Task Item Box */
-.task-box {
+/* -------------------------------------------------------------
+   PRIORITY TASKS ROW
+------------------------------------------------------------- */
+.task-row-container {
     background: #FFFFFF;
     border: 1px solid #E2E8F0;
     border-radius: 12px;
     padding: 14px 16px;
     margin-bottom: 10px;
     transition: all 0.15s ease;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
-.task-box:hover {
+.task-row-container:hover {
     border-color: #CBD5E1;
-    box-shadow: 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
 }
-.task-box-completed {
-    background: #F0FDF4;
-    border-color: #BBF7D0;
-}
-.task-box-missed {
-    background: #FEF2F2;
-    border-color: #FECACA;
+.task-row-completed {
+    background: #F8FAFC;
+    border-color: #E2E8F0;
+    opacity: 0.75;
 }
 
-/* Sidebar Custom Styling */
-section[data-testid="stSidebar"] {
-    background-color: #FFFFFF !important;
-    border-right: 1px solid #E2E8F0 !important;
+/* Priority Badges */
+.badge-priority {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 6px;
+    text-transform: lowercase;
+    display: inline-block;
+}
+.badge-priority-high {
+    background: #FEE2E2;
+    color: #DC2626;
+}
+.badge-priority-medium {
+    background: #FEF3C7;
+    color: #D97706;
+}
+.badge-priority-low {
+    background: #EEF2FF;
+    color: #4F46E5;
+}
+
+/* Course Code Badge */
+.badge-course-code {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748B;
+    background: #F1F5F9;
+    padding: 2px 8px;
+    border-radius: 5px;
+    display: inline-block;
+}
+
+/* -------------------------------------------------------------
+   COURSE CARDS (HORIZONTAL GRID)
+------------------------------------------------------------- */
+.course-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.course-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px -2px rgba(0, 0, 0, 0.07);
+}
+.course-card-blue {
+    border-top: 4px solid #3B82F6;
+}
+.course-card-green {
+    border-top: 4px solid #10B981;
+}
+.course-card-purple {
+    border-top: 4px solid #8B5CF6;
+}
+.course-card-amber {
+    border-top: 4px solid #F59E0B;
+}
+
+.course-card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+.course-code-text {
+    font-size: 12px;
+    font-weight: 600;
+    color: #64748B;
+}
+.course-icon-circle {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+.circle-blue {
+    background: #EFF6FF;
+    color: #2563EB;
+}
+.circle-green {
+    background: #ECFDF5;
+    color: #059669;
+}
+.circle-purple {
+    background: #FAF5FF;
+    color: #7C3AED;
+}
+.circle-amber {
+    background: #FFFBEB;
+    color: #D97706;
+}
+
+.course-card-name {
+    font-size: 17px;
+    font-weight: 800;
+    color: #0F172A;
+    margin: 0 0 12px 0;
+    letter-spacing: -0.01em;
+}
+
+.progress-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11.5px;
+    color: #64748B;
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+.sf-progress-track {
+    width: 100%;
+    height: 6px;
+    background-color: #F1F5F9;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+.sf-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.4s ease;
+}
+
+.course-meta-footer {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+    color: #64748B;
+    padding-top: 10px;
+    border-top: 1px solid #F1F5F9;
+}
+
+/* -------------------------------------------------------------
+   RIGHT SIDEBAR: STUDY SESSION CLOCK & PROGRESS
+------------------------------------------------------------- */
+.digital-clock-display {
+    font-family: 'Plus Jakarta Sans', monospace;
+    font-size: 40px;
+    font-weight: 800;
+    color: #0F172A;
+    letter-spacing: -0.03em;
+    text-align: center;
+    margin: 16px 0 4px 0;
+}
+.digital-clock-caption {
+    font-size: 12px;
+    color: #94A3B8;
+    text-align: center;
+    margin-bottom: 18px;
+}
+
+/* Tasks Progress Widget */
+.progress-fraction {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0F172A;
+}
+.streak-pills-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.streak-pill {
+    flex: 1;
+    height: 8px;
+    border-radius: 4px;
+}
+.streak-pill-active {
+    background: #1E3A8A; /* Dark blue from screenshot */
+}
+.streak-pill-empty {
+    background: #E2E8F0;
+}
+
+/* Custom Primary Buttons */
+button[kind="primary"] {
+    background: #7C3AED !important;
+    border: none !important;
+    color: #FFFFFF !important;
+    border-radius: 9px !important;
+    font-weight: 600 !important;
+    box-shadow: 0 4px 10px rgba(124, 58, 237, 0.25) !important;
+    transition: all 0.2s ease !important;
+}
+button[kind="primary"]:hover {
+    background: #6D28D9 !important;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 14px rgba(124, 58, 237, 0.35) !important;
+}
+.stButton>button {
+    border-radius: 9px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
 }
 </style>
 """
 
 
-def get_web_navbar_html(engine_name=None):
-    if engine_name and "Oracle" in engine_name:
-        db_badge = '<span class="status-pill pill-purple">🏛️ Oracle PL/SQL Connected</span>'
-    else:
-        db_badge = '<span class="status-pill pill-green">🗄️ Database: SQLite / PL-SQL Ready</span>'
-
-    return f"""
-    <div class="web-navbar">
-        <div class="brand-group">
-            <div class="brand-icon-wrapper">📚</div>
-            <div>
-                <h1 class="brand-title">SmartStudy Planner AI</h1>
-                <p class="brand-subtitle">Simple, Interactive Academic Scheduling & AI Study Assistant</p>
-            </div>
-        </div>
-        <div class="badge-stack">
-            {db_badge}
-            <span class="status-pill pill-blue">⏱️ Focus Timer</span>
-            <span class="status-pill pill-purple">🤖 AI Quiz Coach</span>
+def get_sidebar_brand_html():
+    return """
+    <div class="sidebar-brand-box">
+        <div class="sidebar-brand-icon">📚</div>
+        <div>
+            <h1 class="sidebar-brand-title">StudyFlow</h1>
+            <p class="sidebar-brand-subtitle">AI Study Planner</p>
         </div>
     </div>
     """
 
 
-def get_metric_cards_html(total_tasks, completed_tasks, missed_tasks, plan_days):
-    pending_tasks = total_tasks - completed_tasks - missed_tasks
-    completion_pct = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0.0
-
-    return f"""
-    <div class="metrics-grid">
-        <div class="metric-card">
-            <div class="metric-label">Total Plan</div>
-            <div class="metric-value">{total_tasks} <span style="font-size: 15px; font-weight: 500; color: #64748B;">({total_tasks} hrs)</span></div>
-            <div class="metric-sub">📅 Over {plan_days} days timetable</div>
+def get_sidebar_ai_assistant_html():
+    return """
+    <div class="sidebar-ai-box">
+        <div class="sidebar-ai-header">
+            <span>●</span> AI Assistant
         </div>
-        <div class="metric-card">
-            <div class="metric-label">Completed</div>
-            <div class="metric-value" style="color: #15803D;">{completed_tasks}</div>
-            <div class="metric-sub">🎯 {completion_pct:.1f}% syllabus completed</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Remaining / Missed</div>
-            <div class="metric-value" style="color: {'#DC2626' if missed_tasks > 0 else '#D97706'};">{pending_tasks + missed_tasks}</div>
-            <div class="metric-sub">⚠️ {missed_tasks} marked missed</div>
-        </div>
-        <div class="metric-card">
-            <div class="metric-label">Overall Progress</div>
-            <div class="metric-value">{completion_pct:.0f}%</div>
-            <div class="progress-track">
-                <div class="progress-fill" style="width: {completion_pct}%;"></div>
-            </div>
-        </div>
+        <p class="sidebar-ai-text">
+            I've optimized your schedule based on upcoming deadlines.
+        </p>
     </div>
     """
 
 
-POMODORO_HTML = """
-<div id="pomodoro-app" style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 16px; padding: 22px; text-align: center; font-family: 'Inter', -apple-system, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
-    <div style="display: flex; justify-content: center; gap: 8px; margin-bottom: 18px; flex-wrap: wrap;">
-        <button onclick="setMode(25, 'Focus Session')" id="btn-focus" style="padding: 6px 14px; border-radius: 20px; border: 1px solid #C7D2FE; background: #EEF2FF; color: #4338CA; font-weight: 700; cursor: pointer; font-size: 13px;">⚡ Focus (25m)</button>
-        <button onclick="setMode(15, 'Quick Review')" id="btn-quick" style="padding: 6px 14px; border-radius: 20px; border: 1px solid #E2E8F0; background: #F8FAFC; color: #64748B; font-weight: 600; cursor: pointer; font-size: 13px;">🚀 Quick (15m)</button>
-        <button onclick="setMode(5, 'Short Break')" id="btn-short" style="padding: 6px 14px; border-radius: 20px; border: 1px solid #E2E8F0; background: #F8FAFC; color: #64748B; font-weight: 600; cursor: pointer; font-size: 13px;">☕ Break (5m)</button>
+def get_main_greeting_html(student_name="Student"):
+    return f"""
+    <div style="margin-bottom: 22px;">
+        <h1 style="font-size: 28px; font-weight: 800; color: #0F172A; margin: 0; letter-spacing: -0.02em;">Hello, {student_name}</h1>
+        <p style="font-size: 14px; color: #64748B; margin-top: 4px;">Here's an overview of your study progress</p>
     </div>
+    """
 
-    <div style="position: relative; width: 190px; height: 190px; margin: 0 auto;">
-        <svg width="190" height="190" style="transform: rotate(-90deg);">
-            <circle cx="95" cy="95" r="82" stroke="#F1F5F9" stroke-width="12" fill="none" />
-            <circle id="progress-circle" cx="95" cy="95" r="82" stroke="#4F46E5" stroke-width="12" fill="none" stroke-dasharray="515.22" stroke-dashoffset="0" stroke-linecap="round" style="transition: stroke-dashoffset 0.5s ease;" />
-        </svg>
-        <div style="position: absolute; top: 0; left: 0; width: 190px; height: 190px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-            <div id="time-display" style="font-size: 38px; font-weight: 800; color: #0F172A; letter-spacing: -0.03em;">25:00</div>
-            <div id="mode-display" style="font-size: 12px; font-weight: 600; color: #64748B; text-transform: uppercase; margin-top: 2px;">Focus Session</div>
+
+def get_ai_recommendations_banner_html():
+    return """
+    <div class="ai-rec-banner">
+        <div class="ai-rec-title">
+            <span style="color: #7C3AED; font-size: 18px;">✦</span> AI Study Recommendations
+        </div>
+        <p class="ai-rec-desc">
+            Get personalized study recommendations based on your courses and upcoming tasks.
+        </p>
+    </div>
+    """
+
+
+def get_course_card_html(code, name, progress_pct, tasks_count, hours_spent, color="blue", next_info=None):
+    border_class = f"course-card-{color}"
+    circle_class = f"circle-{color}"
+    fill_color = "#3B82F6" if color == "blue" else "#10B981" if color == "green" else "#8B5CF6" if color == "purple" else "#F59E0B"
+
+    next_html = f"<div style='font-size: 11.5px; color: #64748B; margin-top: 8px;'>📅 {next_info}</div>" if next_info else ""
+
+    return f"""
+    <div class="course-card {border_class}">
+        <div class="course-card-top">
+            <span class="course-code-text">{code}</span>
+            <div class="course-icon-circle {circle_class}">📖</div>
+        </div>
+        <div class="course-card-name">{name}</div>
+        <div class="progress-header">
+            <span>Progress</span>
+            <span style="font-weight: 700; color: #0F172A;">{int(progress_pct)}%</span>
+        </div>
+        <div class="sf-progress-track">
+            <div class="sf-progress-fill" style="width: {int(progress_pct)}%; background-color: {fill_color};"></div>
+        </div>
+        <div class="course-meta-footer">
+            <span>📋 {tasks_count} tasks</span>
+            <span>⏱️ {hours_spent}h spent</span>
+        </div>
+        {next_html}
+    </div>
+    """
+
+
+def get_task_progress_widget_html(completed_count, total_count, streak_days=12):
+    pct = (completed_count / total_count * 100) if total_count > 0 else 0
+    return f"""
+    <div class="sf-card" style="padding: 18px 20px;">
+        <div class="sf-card-header">
+            <span class="sf-card-title">Tasks Progress</span>
+            <span style="background: #ECFDF5; color: #059669; padding: 3px 7px; border-radius: 6px; font-size: 13px; font-weight: 700;">☑</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #64748B; margin-bottom: 6px;">
+            <span>Completed</span>
+            <span class="progress-fraction">{completed_count}/{total_count}</span>
+        </div>
+        <div class="sf-progress-track" style="height: 7px; margin-bottom: 16px;">
+            <div class="sf-progress-fill" style="width: {pct}%; background: #10B981;"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; color: #64748B;">
+            <span>Study Streak</span>
+            <span style="font-weight: 700; color: #0F172A;">{streak_days} days</span>
+        </div>
+        <div class="streak-pills-row">
+            <div class="streak-pill streak-pill-active"></div>
+            <div class="streak-pill streak-pill-active"></div>
+            <div class="streak-pill streak-pill-active"></div>
+            <div class="streak-pill streak-pill-active"></div>
+            <div class="streak-pill streak-pill-active"></div>
+            <div class="streak-pill streak-pill-empty"></div>
+        </div>
+        <div style="margin-top: 14px; font-size: 12px; font-weight: 600; color: #64748B; text-align: right;">
+            View detailed analytics →
         </div>
     </div>
-
-    <div style="margin-top: 20px; display: flex; justify-content: center; gap: 10px;">
-        <button onclick="toggleTimer()" id="btn-play" style="padding: 9px 22px; border-radius: 9px; background: #4F46E5; color: #ffffff; font-weight: 700; border: none; cursor: pointer; font-size: 13.5px; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);">▶ Start Focus</button>
-        <button onclick="resetTimer()" style="padding: 9px 18px; border-radius: 9px; background: #F1F5F9; color: #475569; font-weight: 600; border: 1px solid #E2E8F0; cursor: pointer; font-size: 13.5px;">↺ Reset</button>
-    </div>
-</div>
-
-<script>
-let totalSeconds = 25 * 60;
-let remainingSeconds = totalSeconds;
-let timerInterval = null;
-let isRunning = false;
-const circleLength = 515.22;
-
-function playChime() {
-    try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.3);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 1.2);
-    } catch (e) {}
-}
-
-function updateUI() {
-    const m = Math.floor(remainingSeconds / 60);
-    const s = remainingSeconds % 60;
-    document.getElementById('time-display').innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    const offset = circleLength - (remainingSeconds / totalSeconds) * circleLength;
-    document.getElementById('progress-circle').style.strokeDashoffset = offset;
-}
-
-function toggleTimer() {
-    if (isRunning) {
-        clearInterval(timerInterval);
-        isRunning = false;
-        document.getElementById('btn-play').innerText = "▶ Resume";
-        document.getElementById('btn-play').style.background = "#4F46E5";
-    } else {
-        isRunning = true;
-        document.getElementById('btn-play').innerText = "⏸ Pause";
-        document.getElementById('btn-play').style.background = "#D97706";
-        timerInterval = setInterval(() => {
-            if (remainingSeconds > 0) {
-                remainingSeconds--;
-                updateUI();
-            } else {
-                clearInterval(timerInterval);
-                isRunning = false;
-                playChime();
-                document.getElementById('btn-play').innerText = "🎉 Finished!";
-                document.getElementById('btn-play').style.background = "#10B981";
-            }
-        }, 1000);
-    }
-}
-
-function resetTimer() {
-    clearInterval(timerInterval);
-    isRunning = false;
-    remainingSeconds = totalSeconds;
-    updateUI();
-    document.getElementById('btn-play').innerText = "▶ Start Focus";
-    document.getElementById('btn-play').style.background = "#4F46E5";
-}
-
-function setMode(mins, label) {
-    clearInterval(timerInterval);
-    isRunning = false;
-    totalSeconds = mins * 60;
-    remainingSeconds = totalSeconds;
-    document.getElementById('mode-display').innerText = label;
-    document.getElementById('btn-play').innerText = "▶ Start " + label;
-    document.getElementById('btn-play').style.background = "#4F46E5";
-
-    ['btn-focus', 'btn-quick', 'btn-short'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.style.background = '#F8FAFC';
-            el.style.color = '#64748B';
-            el.style.borderColor = '#E2E8F0';
-        }
-    });
-    const activeId = mins === 25 ? 'btn-focus' : mins === 15 ? 'btn-quick' : 'btn-short';
-    const activeEl = document.getElementById(activeId);
-    if (activeEl) {
-        activeEl.style.background = '#EEF2FF';
-        activeEl.style.color = '#4338CA';
-        activeEl.style.borderColor = '#C7D2FE';
-    }
-
-    updateUI();
-}
-updateUI();
-</script>
-"""
+    """
