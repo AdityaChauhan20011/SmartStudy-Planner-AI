@@ -317,8 +317,13 @@ section[data-testid="stSidebar"] {
 """
 
 
-def get_web_navbar_html():
-    return """
+def get_web_navbar_html(engine_name=None):
+    if engine_name and "Oracle" in engine_name:
+        db_badge = '<span class="status-pill pill-purple">🏛️ Oracle PL/SQL Connected</span>'
+    else:
+        db_badge = '<span class="status-pill pill-green">🗄️ Database: SQLite / PL-SQL Ready</span>'
+
+    return f"""
     <div class="web-navbar">
         <div class="brand-group">
             <div class="brand-icon-wrapper">📚</div>
@@ -328,9 +333,9 @@ def get_web_navbar_html():
             </div>
         </div>
         <div class="badge-stack">
-            <span class="status-pill pill-green">🗄️ SQLite Database</span>
-            <span class="status-pill pill-purple">⏱️ Focus Timer</span>
-            <span class="status-pill pill-blue">🤖 AI Quiz Coach</span>
+            {db_badge}
+            <span class="status-pill pill-blue">⏱️ Focus Timer</span>
+            <span class="status-pill pill-purple">🤖 AI Quiz Coach</span>
         </div>
     </div>
     """

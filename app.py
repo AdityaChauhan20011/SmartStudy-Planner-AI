@@ -20,9 +20,11 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from pathlib import Path
 
 # Modular subsystem imports
 import database as db
+import plsql_manager as pm
 import planner
 import ai_assistant as ai
 import styles
@@ -52,7 +54,8 @@ def main():
     # ---------------------------------------------------------
     # Top Navigation Banner
     # ---------------------------------------------------------
-    st.markdown(styles.get_web_navbar_html(), unsafe_allow_html=True)
+    active_engine_name = db.get_current_engine_name()
+    st.markdown(styles.get_web_navbar_html(active_engine_name), unsafe_allow_html=True)
 
     # ---------------------------------------------------------
     # Sidebar: Simple Settings & Health
@@ -80,11 +83,17 @@ def main():
             st.info("💡 Local AI offline. Built-in interactive quiz and study guides are active!", icon="ℹ️")
 
         st.markdown("---")
-        st.markdown("### 🗄️ SQLite Database")
+        st.markdown("### 🗄️ Relational Database")
         db_stats = db.get_database_stats()
-        st.caption(f"📁 **File:** `{db_stats['file']}` ({db_stats['size_kb']} KB)")
+        st.caption(f"⚙️ **Engine:** `{db_stats.get('engine', 'SQLite')}`")
+        if "file" in db_stats:
+            st.caption(f"📁 **File:** `{db_stats['file']}` ({db_stats['size_kb']} KB)")
+        elif "dsn" in db_stats:
+            st.caption(f"🌐 **Oracle DSN:** `{db_stats['dsn']}`")
         st.caption(f"📚 **Subjects:** {db_stats['subjects_count']} • 📅 **Tasks:** {db_stats['tasks_count']}")
         st.caption(f"⏱️ **Pomodoro Sprints:** {db_stats['pomodoro_count']} completed")
+        if db_stats.get("audit_count", 0) > 0:
+            st.caption(f"🛡️ **Trigger Audits:** {db_stats['audit_count']} logged")
 
     # ---------------------------------------------------------
     # Summary Metrics Cards
@@ -716,32 +725,147 @@ def main():
                 )
                 st.altair_chart(donut_chart, use_container_width=True)
 
-        # Direct SQLite Tables Viewer
+        # Direct Relational Database & PL/SQL Management
         st.markdown("---")
-        st.markdown("#### 🗄️ SQLite Database Inspector (`study_database.db`)")
-        st.caption("Inspect live records stored in relational tables:")
+        st.markdown("#### 🗄️ Relational Database & Oracle PL/SQL Management")
+        st.caption(f"Active Backend: **{active_engine_name}**")
 
-        t1, t2, t3 = st.tabs(["📋 subjects table", "📅 tasks table", "⏱️ pomodoro_logs table"])
-        with t1:
-            raw_s = db.get_all_subjects()
-            if raw_s:
-                st.dataframe(pd.DataFrame(raw_s), use_container_width=True)
-            else:
-                st.caption("No records in subjects table.")
+        tab_db_records, tab_db_plsql, tab_db_code = st.tabs([
+            "  📋 Live Database Records  ",
+            "  🏛️ Oracle PL/SQL Connection  ",
+            "  📜 Stored Procedures & Package (PL/SQL)  ",
+        ])
 
-        with t2:
-            raw_t = db.get_all_tasks()
-            if raw_t:
-                st.dataframe(pd.DataFrame(raw_t), use_container_width=True)
-            else:
-                st.caption("No records in tasks table.")
+        # -----------------------------
+        # Sub-tab 1: Live Records
+        # -----------------------------
+        with tab_db_records:
+            t1, t2, t3, t4 = st.tabs(["📋 SUBJECTS", "📅 TASKS", "⏱️ POMODORO_LOGS", "🛡️ AUDIT_LOGS"])
+            with t1:
+                raw_s = db.get_all_subjects()
+                if raw_s:
+                    st.dataframe(pd.DataFrame(raw_s), use_container_width=True)
+                else:
+                    st.caption("No records in subjects table.")
 
-        with t3:
-            raw_p = db.get_pomodoro_logs()
-            if raw_p:
-                st.dataframe(pd.DataFrame(raw_p), use_container_width=True)
+            with t2:
+                raw_t = db.get_all_tasks()
+                if raw_t:
+                    st.dataframe(pd.DataFrame(raw_t), use_container_width=True)
+                else:
+                    st.caption("No records in tasks table.")
+
+            with t3:
+                raw_p = db.get_pomodoro_logs()
+                if raw_p:
+                    st.dataframe(pd.DataFrame(raw_p), use_container_width=True)
+                else:
+                    st.caption("No records in pomodoro_logs table.")
+
+            with t4:
+                if db.is_oracle_mode():
+                    try:
+                        raw_a = pm.plsql_get_audit_logs()
+                        if raw_a:
+                            st.dataframe(pd.DataFrame(raw_a), use_container_width=True)
+                        else:
+                            st.caption("No audit entries yet. Triggers record all insert/update operations.")
+                    except Exception as e:
+                        st.caption(f"Audit log query error: {e}")
+                else:
+                    st.info("💡 Trigger audit logs are maintained in Oracle Database via `TRG_TASKS_AUDIT` trigger in the `AUDIT_LOGS` table.")
+
+        # -----------------------------
+        # Sub-tab 2: Oracle PL/SQL Connection
+        # -----------------------------
+        with tab_db_plsql:
+            st.markdown("##### 🏛️ Oracle Database & PL/SQL Configuration")
+            st.write("Connect to your local or remote Oracle Database (11g, 12c, 19c, 21c, 23ai Express / Enterprise) via `oracledb` Thin mode:")
+
+            curr_cfg = pm.load_oracle_config()
+
+            col_o1, col_o2 = st.columns(2)
+            with col_o1:
+                o_host = st.text_input("Oracle Host", value=curr_cfg.get("host", "localhost"))
+                o_port = st.number_input("Oracle Port", value=int(curr_cfg.get("port", 1521)), step=1)
+                o_service = st.text_input("Service Name / SID", value=curr_cfg.get("service_name", "XE"), help="Defaults: XE for Express Edition, ORCL for Enterprise, or XEPDB1 for pluggable DB.")
+
+            with col_o2:
+                o_user = st.text_input("Username", value=curr_cfg.get("user", "system"))
+                o_pass = st.text_input("Password", value=curr_cfg.get("password", ""), type="password")
+                o_enable = st.checkbox("Enable Oracle PL/SQL as Active Database Engine", value=curr_cfg.get("enabled", False))
+
+            c_btn_test, c_btn_save, c_btn_init, c_btn_sync = st.columns([2, 2, 3, 3])
+
+            with c_btn_test:
+                if st.button("🔌 Test Connection", use_container_width=True):
+                    if not o_pass:
+                        st.warning("Please enter your Oracle password.")
+                    else:
+                        ok, msg = pm.test_oracle_connection(o_user, o_pass, o_host, o_port, o_service)
+                        if ok:
+                            st.success(f"✅ {msg}")
+                        else:
+                            st.error(f"❌ Connection Failed: {msg}")
+
+            with c_btn_save:
+                if st.button("💾 Save Settings", use_container_width=True):
+                    new_cfg = {
+                        "enabled": o_enable,
+                        "user": o_user,
+                        "password": o_pass,
+                        "host": o_host,
+                        "port": int(o_port),
+                        "service_name": o_service,
+                    }
+                    pm.save_oracle_config(new_cfg)
+                    st.toast("Oracle configuration saved!")
+                    st.rerun()
+
+            with c_btn_init:
+                if st.button("⚡ Compile PL/SQL Script", use_container_width=True):
+                    if not o_pass:
+                        st.warning("Please configure and test Oracle connection credentials first.")
+                    else:
+                        with st.spinner("Compiling tables, sequences, triggers, and STUDY_PLANNER_PKG on Oracle..."):
+                            ok, msg = pm.plsql_init_schema()
+                            if ok:
+                                st.balloons()
+                                st.success(f"🎉 {msg}")
+                                st.rerun()
+                            else:
+                                st.error(f"❌ PL/SQL Compilation Error: {msg}")
+
+            with c_btn_sync:
+                if st.button("🔄 Sync SQLite -> Oracle", use_container_width=True):
+                    ok, msg = db.sync_sqlite_to_oracle()
+                    if ok:
+                        st.toast(msg)
+                        st.rerun()
+                    else:
+                        st.warning(msg)
+
+        # -----------------------------
+        # Sub-tab 3: PL/SQL Code & Package Viewer
+        # -----------------------------
+        with tab_db_code:
+            st.markdown("##### 📜 Oracle PL/SQL Package (`STUDY_PLANNER_PKG`) & Architecture")
+            st.write("All application data operations are handled via compiled PL/SQL stored procedures, triggers, sequences, and package bodies:")
+
+            sql_file_path = Path(__file__).parent / "database_plsql.sql"
+            if sql_file_path.exists():
+                sql_content = sql_file_path.read_text(encoding="utf-8")
+                st.download_button(
+                    label="📥 Download database_plsql.sql (Ready for Oracle SQL Developer / SQL*Plus)",
+                    data=sql_content,
+                    file_name="database_plsql.sql",
+                    mime="text/x-sql",
+                    type="primary",
+                )
+                with st.expander("👁️ View Full PL/SQL Script (DDL, Sequences, Triggers, Functions & Package)", expanded=True):
+                    st.code(sql_content, language="sql")
             else:
-                st.caption("No records in pomodoro_logs table.")
+                st.caption("database_plsql.sql file not found.")
 
     # ---------------------------------------------------------
     # Web Footer
@@ -750,7 +874,7 @@ def main():
     st.markdown(
         """
         <div style="border-top: 1px solid #E2E8F0; padding: 18px 0; text-align: center; color: #94A3B8; font-size: 12px;">
-            SmartStudy Planner AI • Clean, Interactive Local Study Suite • SQLite Relational Engine (<code>study_database.db</code>)
+            SmartStudy Planner AI • Clean, Interactive Local Study Suite • Relational Engine (SQLite & Oracle PL/SQL <code>STUDY_PLANNER_PKG</code>)
         </div>
         """,
         unsafe_allow_html=True,

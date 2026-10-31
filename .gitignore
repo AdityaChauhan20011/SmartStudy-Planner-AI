@@ -4,4 +4,6 @@ __pycache__/
 *.pyc
 study_data.json
 *.db
+oracle_config.json
+
 
